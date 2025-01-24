@@ -1,0 +1,147 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Planck Function
+
+def planck_function(wavelength, temperature):
+    """
+    Calculate spectral radiance from Planck's law.
+
+    Parameters
+    ----------
+    wavelength : float or array
+        Wavelength in meters.
+    temperature : float
+        Temperature in Kelvin.
+
+    Returns
+    -------
+    float or array
+        Spectral radiance in W/m^2/sr/um.
+    """
+    h = 6.62607015e-34  # Planck constant (J*s)
+    c = 3.0e8  # Speed of light (m/s)
+    k = 1.380649e-23  # Boltzmann constant (J/K)
+
+    exponent = (h * c) / (wavelength * k * temperature)
+    
+    # Handle large exponent cases
+    with np.errstate(over="ignore"):
+        radiance = np.where(
+            exponent > 700,  # Threshold for overflow in exp()
+            (2 * h * c**2) / (wavelength**5 * np.exp(exponent)),  # Approximation
+            (2 * h * c**2) / (wavelength**5 * (np.exp(exponent) - 1))
+        )
+
+    return radiance * 1e-6  # Convert to W/m^2/sr/um
+
+# Planck Inversion
+
+def planck_inv(wavelength, spectral_radiance):
+    """
+    Calculate temperature from spectral radiance using Planck's law.
+
+    Parameters
+    ----------
+    wavelength : float
+        Wavelength in meters.
+    spectral_radiance : float
+        Spectral radiance in W/m^2/sr/um.
+
+    Returns
+    -------
+    float
+        Temperature in Kelvin.
+    """
+    h = 6.62607015e-34
+    c = 3.0e8
+    k = 1.380649e-23
+
+    spectral_radiance_m = spectral_radiance * 1e6
+    term = (2 * h * c**2) / (wavelength**5 * spectral_radiance_m)
+
+    temperature = (h * c) / (wavelength * k * np.log(term + 1))
+    return temperature
+
+# Radiance Integration
+
+def radiance(temperature, band_center, band_width):
+    """
+    Calculate band-integrated radiance for a rectangular bandpass.
+
+    Parameters
+    ----------
+    temperature : float
+        Temperature in Kelvin.
+    band_center : float
+        Center wavelength of bandpass in meters.
+    band_width : float
+        Width of bandpass in meters.
+
+    Returns
+    -------
+    float
+        Band-integrated radiance in W/m^2/sr.
+    """
+    if temperature <= 0 or band_width <= 0 or band_center <= band_width / 2:
+        raise ValueError("Invalid input: Check temperature, band_width, and band_center values.")
+
+    wavelengths = np.linspace(band_center - band_width / 2, band_center + band_width / 2, 1000)
+    radiances = planck_function(wavelengths, temperature)
+
+    return np.trapz(radiances, wavelengths)
+
+# Basic Validation and Plotting
+
+def plot_planck_functions():
+    temperatures = [5778, 300, 100]
+    wavelengths = np.linspace(1e-7, 3e-6, 1000)
+
+    plt.figure(figsize=(10, 6))
+    for temp in temperatures:
+        radiances = planck_function(wavelengths, temp)
+        plt.plot(wavelengths * 1e6, radiances, label=f"T = {temp} K")
+
+    plt.xlabel("Wavelength (um)")
+    plt.ylabel("Spectral Radiance (W/m^2/sr/um)")
+    plt.yscale("log")  # Use logarithmic scale
+    plt.title("Planck Function for Different Temperatures")
+    plt.legend()
+    plt.grid()
+    plt.show()
+
+def validate_planck_inv():
+    wavelengths = [500e-9, 1000e-9, 1500e-9]
+    temperature = 300
+
+    for wl in wavelengths:
+        spectral_radiance = planck_function(wl, temperature)
+        recovered_temp = planck_inv(wl, spectral_radiance)
+        print(f"Wavelength: {wl * 1e9:.1f} nm, Input Temp: {temperature} K, Recovered Temp: {recovered_temp:.2f} K")
+
+def plot_band_integrated_radiance():
+    temperatures = np.linspace(50, 1000, 100)
+    band_center = 10e-6  # 10 microns
+    band_widths = [1e-6, 5e-6, 10e-6]
+
+    plt.figure(figsize=(10, 6))
+    for bw in band_widths:
+        radiances = [radiance(temp, band_center, bw) for temp in temperatures]
+        plt.plot(temperatures, radiances, label=f"Bandwidth = {bw * 1e6:.1f} um")
+
+    plt.xlabel("Temperature (K)")
+    plt.ylabel("Radiance (W/m^2/sr)")
+    plt.title("Band-Integrated Radiance vs Temperature")
+    plt.legend()
+    plt.grid()
+    plt.show()
+
+if __name__ == "__main__":
+    print("Plotting Planck Functions...")
+    plot_planck_functions()
+
+    print("Validating Planck Inversion...")
+    validate_planck_inv()
+
+    print("Plotting Band-Integrated Radiance...")
+    plot_band_integrated_radiance()
